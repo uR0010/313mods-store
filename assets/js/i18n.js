@@ -86,6 +86,7 @@ window.I18N = {
     'basket.total': 'Total',
     'basket.checkout': 'Checkout',
     'basket.secure': 'Secure payment on Tebex: card, PayPal and more.',
+    'basket.taxnote': 'Taxes for your country are added at checkout.',
     'basket.loading': 'Loading basket…',
 
     'toast.added': 'Added to your basket',
@@ -191,6 +192,7 @@ window.I18N = {
     'basket.total': 'Total',
     'basket.checkout': 'Pagar',
     'basket.secure': 'Pago seguro en Tebex: tarjeta, PayPal y más.',
+    'basket.taxnote': 'Los impuestos de tu país se suman al pagar.',
     'basket.loading': 'Cargando la cesta…',
 
     'toast.added': 'Añadido a tu cesta',
@@ -296,6 +298,7 @@ window.I18N = {
     'basket.total': 'Total',
     'basket.checkout': 'Pagar',
     'basket.secure': 'Pagamento seguro na Tebex: cartão, PayPal e mais.',
+    'basket.taxnote': 'Os impostos do seu país são somados no pagamento.',
     'basket.loading': 'Carregando a cesta…',
 
     'toast.added': 'Adicionado à sua cesta',

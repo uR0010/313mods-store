@@ -583,6 +583,7 @@
         foot = '<div class="drawer-foot">' + (checkout
           ? '<a class="btn btn-full" href="' + esc(checkout) + '">' + esc(t('basket.checkout')) + ' · ' + esc(money(b.total_price, b.currency)) + '</a>'
           : '<button type="button" class="btn btn-full" disabled>' + esc(t('basket.checkout')) + '</button>') +
+          (Number(b.sales_tax) > 0 ? '' : '<p class="small-note">' + esc(t('basket.taxnote')) + '</p>') +
           '<p class="small-note">' + esc(t('basket.secure')) + '</p></div>';
       }
     }
