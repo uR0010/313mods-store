@@ -31,4 +31,6 @@ Abre http://localhost:8313
 
 ## Publicar con GitHub Pages
 
-Settings → Pages → Source: «Deploy from a branch» → Branch `main`, carpeta `/ (root)` → Save. La web queda en `https://<usuario>.github.io/<repositorio>/`.
+La web está publicada con GitHub Pages en **https://313mods.shop** (rama `main`, carpeta raíz). Cada cambio que se sube a `main` se publica solo en uno o dos minutos.
+
+El dominio se compró en Hostinger y apunta a GitHub con 4 registros A (`185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`) y un CNAME `www` → `ur0010.github.io`. El archivo `CNAME` de este repositorio lo crea GitHub: no lo borres.
