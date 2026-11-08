@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>313 Mods | FiveM Clothing &amp; Weapons</title>
+  <meta name="description" content="Custom clothing and add-on weapons for FiveM and GTA V Story Mode. Instant delivery to your Cfx.re account.">
+  <meta name="theme-color" content="#07060B">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="313 Mods | FiveM Clothing &amp; Weapons">
+  <meta property="og:description" content="Custom clothing and add-on weapons for FiveM and GTA V Story Mode.">
+  <meta property="og:image" content="assets/img/og-image.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="assets/img/icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/img/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://headless.tebex.io" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;600&family=Manrope:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+  <a class="skip" href="#view" data-i18n="a11y.skip">Skip to content</a>
+
+  <header class="site-head">
+    <div class="wrap head-row">
+      <a class="logo" href="#/" aria-label="313 Mods">
+        <img src="assets/img/logo.svg" alt="313 Mods" width="254" height="68">
+      </a>
+      <nav class="nav" id="nav" aria-label="Main"></nav>
+      <div class="head-act">
+        <a class="btn-ghost hide-sm" id="discord-head" href="#" target="_blank" rel="noopener">Discord</a>
+        <label class="lang hide-sm"><span class="sr" data-i18n="lang.label">Language</span>
+          <select id="lang-select" aria-label="Language">
+            <option value="en">EN</option><option value="es">ES</option><option value="pt">PT</option>
+          </select>
+        </label>
+        <button type="button" class="cart-btn" id="cart-btn" aria-haspopup="dialog" aria-controls="basket">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" d="M2.5 4 H5.5 L8 15.5 H18 L20.5 7.5 H6.5"/><circle cx="9.5" cy="19.5" r="1.6" fill="currentColor"/><circle cx="17" cy="19.5" r="1.6" fill="currentColor"/></svg>
+          <span class="sr" data-i18n="basket.title">Basket</span><b id="cart-count">0</b>
+        </button>
+        <button type="button" class="burger" id="burger" aria-expanded="false" aria-controls="mobile-menu"><span class="sr" data-i18n="nav.menu">Menu</span><i></i><i></i><i></i></button>
+      </div>
+    </div>
+    <div class="mobile-menu" id="mobile-menu" hidden>
+      <div class="wrap">
+        <nav class="m-nav" id="m-nav" aria-label="Main"></nav>
+        <div class="m-row">
+          <a class="btn-ghost" id="discord-menu" href="#" target="_blank" rel="noopener">Discord</a>
+          <label class="lang"><span class="sr" data-i18n="lang.label">Language</span>
+            <select id="lang-select-m" aria-label="Language">
+              <option value="en">EN</option><option value="es">ES</option><option value="pt">PT</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="ticker" aria-hidden="true"><div class="ticker-track" id="ticker"></div></div>
+  </header>
+
+  <main id="view" tabindex="-1"></main>
+
+  <footer class="site-foot">
+    <div class="wrap foot-grid">
+      <div class="foot-brand">
+        <img src="assets/img/logo.svg" alt="313 Mods" width="180" height="48">
+        <p data-i18n="footer.disclaimer">Not affiliated with or endorsed by Rockstar Games or Take-Two Interactive.</p>
+      </div>
+      <nav class="foot-links" aria-label="Footer">
+        <a id="discord-foot" href="#" target="_blank" rel="noopener">Discord</a>
+        <a href="https://checkout.tebex.io/terms" target="_blank" rel="noopener" data-i18n="footer.terms">Terms</a>
+        <a href="https://checkout.tebex.io/privacy" target="_blank" rel="noopener" data-i18n="footer.privacy">Privacy</a>
+        <a href="https://checkout.tebex.io/impressum" target="_blank" rel="noopener">Impressum</a>
+      </nav>
+    </div>
+    <div class="wrap mor">
+      <p data-i18n="footer.mor">This website and its checkout are operated by Tebex Limited, who are the official reseller and merchant of record for all purchases. Tebex handles payments, billing and refunds.</p>
+      <p>© <span id="year">2026</span> 313 Mods</p>
+    </div>
+  </footer>
+
+  <!-- Package details -->
+  <div class="overlay" id="pkg-overlay" hidden></div>
+  <section class="sheet" id="pkg" role="dialog" aria-modal="true" aria-labelledby="pkg-name" hidden></section>
+
+  <!-- Basket -->
+  <aside class="drawer" id="basket" role="dialog" aria-modal="true" aria-labelledby="basket-h" hidden></aside>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/i18n.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
