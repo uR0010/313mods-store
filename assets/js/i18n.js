@@ -12,6 +12,11 @@ window.I18N = {
 
     'ticker': ['Instant delivery to your Cfx.re account', 'Free drops for the community', 'Support on Discord', 'Secure checkout by Tebex'],
 
+    'hero.male-v1.tag': 'Clothing pack · FiveM',
+    'hero.male-v1.title': '313 MALE',
+    'hero.male-v1.accent': 'V1',
+    'hero.male-v1.sub': 'Unbranded streetwear for MP Male.',
+    'hero.male-v1.cta': 'View pack',
     'hero.drop.tag': 'New drop · Season 01',
     'hero.drop.title': 'Gear up your',
     'hero.drop.accent': 'crew.',
@@ -118,6 +123,11 @@ window.I18N = {
 
     'ticker': ['Entrega inmediata en tu cuenta Cfx.re', 'Drops gratis para la comunidad', 'Soporte en Discord', 'Pago seguro con Tebex'],
 
+    'hero.male-v1.tag': 'Pack de ropa · FiveM',
+    'hero.male-v1.title': '313 MALE',
+    'hero.male-v1.accent': 'V1',
+    'hero.male-v1.sub': 'Streetwear sin marcas para MP Male.',
+    'hero.male-v1.cta': 'Ver pack',
     'hero.drop.tag': 'Nuevo drop · Temporada 01',
     'hero.drop.title': 'Equipa a tu',
     'hero.drop.accent': 'crew.',
@@ -224,6 +234,11 @@ window.I18N = {
 
     'ticker': ['Entrega imediata na sua conta Cfx.re', 'Drops grátis para a comunidade', 'Suporte no Discord', 'Pagamento seguro pela Tebex'],
 
+    'hero.male-v1.tag': 'Pacote de roupas · FiveM',
+    'hero.male-v1.title': '313 MALE',
+    'hero.male-v1.accent': 'V1',
+    'hero.male-v1.sub': 'Streetwear sem marcas para MP Male.',
+    'hero.male-v1.cta': 'Ver pacote',
     'hero.drop.tag': 'Novo drop · Temporada 01',
     'hero.drop.title': 'Equipe a sua',
     'hero.drop.accent': 'crew.',

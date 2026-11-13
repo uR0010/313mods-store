@@ -11,13 +11,13 @@ window.SITE_CONFIG = {
 
   // How many products the "New drop" row shows on the home page.
   newDropLimit: 8,
+  featuredPackageId: 7810095,
 
   // Carousel slides. "target" picks the category the main button opens:
-  // "all" scrolls to the products, "clothing" / "weapons" / "packs" find a matching category by name.
+  // "featured" opens the featured package, "all" scrolls to New Drop,
+  // and "clothing" / "weapons" / "packs" find a matching category by name.
   slides: [
-    { key: 'drop', image: 'assets/img/banner-drop', target: 'all' },
-    { key: 'clothing', image: 'assets/img/banner-clothing', target: 'clothing' },
-    { key: 'weapons', image: 'assets/img/banner-weapons', target: 'weapons' }
+    { key: 'male-v1', image: 'assets/img/banner-male-v1', target: 'featured' }
   ],
 
   // Words used to recognise each kind of category by its name in Tebex.
