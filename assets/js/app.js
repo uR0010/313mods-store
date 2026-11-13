@@ -331,12 +331,18 @@
 
   /* ---------- Views ---------- */
   function heroHtml() {
-    var slides = C.slides || [];
-    var out = '<section class="hero" aria-roledescription="carousel" aria-label="313 Mods">';
+    var slides = (C.slides || []).filter(function (s) {
+      return s.target !== 'featured' || state.loading || state.byId[C.featuredPackageId];
+    });
+    if (!slides.length) return '';
+    if (state.slide >= slides.length) state.slide = 0;
+    var out = '<section class="hero"' + (slides.length > 1 ? ' aria-roledescription="carousel"' : '') + ' aria-label="313 Mods">';
     slides.forEach(function (s, i) {
       var k = 'hero.' + s.key + '.';
       var cta = '', second = '';
-      if (s.target === 'all') {
+      if (s.target === 'featured') {
+        cta = '<a class="btn" href="#/package/' + esc(C.featuredPackageId) + '">' + esc(t(k + 'cta')) + '</a>';
+      } else if (s.target === 'all') {
         cta = '<button type="button" class="btn" data-scroll="products">' + esc(t(k + 'cta')) + '</button>';
         second = '<a class="btn-2" href="' + esc(C.discordUrl) + '" target="_blank" rel="noopener">' + esc(t('hero.discord')) + '</a>';
       } else {
@@ -345,8 +351,12 @@
         else if (state.cats) cta = '<a class="btn-2" href="' + esc(C.discordUrl) + '" target="_blank" rel="noopener">' + esc(t('hero.soon')) + '</a>';
       }
       var hTag = i === 0 && state.view.name === 'home' ? 'h1' : 'h2';
-      out += '<div class="slide' + (i === state.slide ? ' on' : '') + '" role="group" aria-roledescription="slide" aria-label="' + (i + 1) + ' / ' + slides.length + '"' + (i === state.slide ? '' : ' aria-hidden="true"') + '>' +
-        '<img class="bg" src="' + esc(s.image) + '.webp" srcset="' + esc(s.image) + '-960.webp 960w, ' + esc(s.image) + '.webp 1920w" sizes="(max-width: 760px) 100vw, 1240px" alt="" ' + (i === 0 ? 'fetchpriority="high"' : 'loading="lazy"') + '>' +
+      var image = esc(s.image);
+      var imageSources = s.target === 'featured' ? '' :
+        ' srcset="' + image + '-960.webp 960w, ' + image + '.webp 1920w" sizes="(max-width: 760px) 100vw, 1240px"';
+      var slideLabel = slides.length > 1 ? ' role="group" aria-roledescription="slide" aria-label="' + (i + 1) + ' / ' + slides.length + '"' : '';
+      out += '<div class="slide' + (s.target === 'featured' ? ' slide-featured' : '') + (i === state.slide ? ' on' : '') + '"' + slideLabel + (i === state.slide ? '' : ' aria-hidden="true"') + '>' +
+        '<img class="bg" src="' + image + '.webp"' + imageSources + ' alt="" ' + (i === 0 ? 'fetchpriority="high"' : 'loading="lazy"') + '>' +
         '<div class="slide-copy"><p class="tag">' + esc(t(k + 'tag')) + '</p>' +
         '<' + hTag + '>' + esc(t(k + 'title')) + ' <span>' + esc(t(k + 'accent')) + '</span></' + hTag + '>' +
         '<p class="slide-sub">' + esc(t(k + 'sub')) + '</p>' +
@@ -405,8 +415,11 @@
       (state.pkgs.length > C.newDropLimit ? '<a href="#/all">' + esc(t('drop.all')) + ' →</a>' : '') + '</div><div class="grid">';
     if (state.loading) html += skeletonCards(4);
     else {
-      var newest = state.pkgs.slice().sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); }).slice(0, C.newDropLimit);
-      html += newest.map(cardHtml).join('');
+      var featured = state.byId[C.featuredPackageId];
+      var newest = state.pkgs.filter(function (p) { return p !== featured; })
+        .sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); });
+      if (featured) newest.unshift(featured);
+      html += newest.slice(0, C.newDropLimit).map(cardHtml).join('');
     }
     html += '</div></section>';
     html += '<div class="info">' + [1, 2, 3, 4].map(function (n) {
@@ -474,7 +487,7 @@
   function startCarousel() {
     clearInterval(timer);
     var hero = $('.hero');
-    if (!hero || reduced || (C.slides || []).length < 2) return;
+    if (!hero || state.loading || reduced || $$('.hero .slide').length < 2) return;
     hero.addEventListener('mouseenter', function () { paused = true; });
     hero.addEventListener('mouseleave', function () { paused = false; });
     hero.addEventListener('focusin', function () { paused = true; });
@@ -634,6 +647,7 @@
     state.cameFromList = false;
     if (r.name === 'thanks') { lsSet(KEYS.basket, null); state.basket = null; updateCount(); }
     var changed = JSON.stringify(r) !== JSON.stringify(state.view) || !state.viewRendered;
+    if (changed && r.name === 'home') state.slide = 0;
     state.view = r;
     if (changed) { render(); state.viewRendered = true; window.scrollTo(0, 0); }
   }
