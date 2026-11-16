@@ -6,7 +6,10 @@
   var I = window.I18N;
   var API = C.apiBase;
   var ACC = API + '/accounts/' + encodeURIComponent(C.publicToken);
-  var KEYS = { basket: '313mods.basket', lang: '313mods.lang', code: '313mods.code' };
+  var KEYS = {
+    basket: '313mods.basket', lang: '313mods.lang', code: '313mods.code',
+    coupon: '313mods.coupon', call: '313mods.call', gift: '313mods.gift', seen: '313mods.seen'
+  };
 
   var state = {
     lang: 'en',
@@ -94,6 +97,16 @@
     if (c.fivem) out += '<span>' + esc(t('compat.fivem')) + '</span>';
     if (c.story) out += '<span>' + esc(t('compat.story')) + '</span>';
     return out;
+  }
+  // Extra labels for the product sheet: frameworks, ped and game build, only when the listing states them.
+  function detailChips(p) {
+    var txt = (p.name || '') + ' ' + plainText(p.description), out = [];
+    (C.frameworks || []).forEach(function (f) { if (f[1].test(txt)) out.push(f[0]); });
+    var ped = /mp[\s_-]?female|\bfemale\b/i.test(txt) ? 'MP Female' : (/mp[\s_-]?male|\bmale\b/i.test(txt) ? 'MP Male' : '');
+    if (ped) out.push(ped);
+    var build = txt.match(/build\s*(\d{4})/i);
+    if (build) out.push(t('pkg.build', { b: build[1] }));
+    return out.map(function (x) { return '<span>' + esc(x) + '</span>'; }).join('');
   }
   function inBasket(id) {
     var b = state.basket;
@@ -292,6 +305,41 @@
     }).catch(function () { toast(t('toast.code_bad')); return false; });
   }
 
+  // Coupons (welcome call, basket gift or any code typed in the basket).
+  function hasCoupon(code) {
+    var b = state.basket;
+    return !!(b && b.coupons && b.coupons.some(function (c) { return String(c.code || c.coupon_code || '').toUpperCase() === String(code).toUpperCase(); }));
+  }
+  function applyCoupon(code, quiet) {
+    code = String(code || '').trim().toUpperCase();
+    if (!code || !state.basket) return Promise.resolve(false);
+    if (hasCoupon(code)) { lsSet(KEYS.coupon, null); return Promise.resolve(true); }
+    return api(ACC + '/baskets/' + encodeURIComponent(state.basket.ident) + '/coupons', {
+      method: 'POST', body: { coupon_code: code }
+    }).then(function (j) {
+      if (j && j.success === false) throw new Error(j.message || 'bad coupon');
+      lsSet(KEYS.coupon, null);
+      return loadBasket().then(function () { afterBasketChange(); if (!quiet) toast(t('toast.coupon_ok')); return true; });
+    }).catch(function () {
+      lsSet(KEYS.coupon, null);
+      toast(t('toast.coupon_bad'));
+      return false;
+    });
+  }
+  function removeCoupon(code) {
+    if (!state.basket) return;
+    api(ACC + '/baskets/' + encodeURIComponent(state.basket.ident) + '/coupons/remove', {
+      method: 'POST', body: { coupon_code: code }
+    }).then(loadBasket).then(afterBasketChange).catch(fail);
+  }
+  // Codes saved before login (welcome call, creator code) go on as soon as the basket is logged in.
+  function applySavedCodes() {
+    if (!isAuthed()) return Promise.resolve();
+    var creator = lsGet(KEYS.code), coupon = lsGet(KEYS.coupon);
+    var next = creator && !state.basket.creator_code ? applyCreatorCode(creator) : Promise.resolve();
+    return next.then(function () { return coupon ? applyCoupon(coupon, false) : null; });
+  }
+
   function afterBasketChange() {
     updateCount();
     refreshAddButtons();
@@ -339,9 +387,12 @@
     var out = '<section class="hero"' + (slides.length > 1 ? ' aria-roledescription="carousel"' : '') + ' aria-label="313 Mods">';
     slides.forEach(function (s, i) {
       var k = 'hero.' + s.key + '.';
-      var cta = '', second = '';
+      var cta = '', second = '', check = '';
       if (s.target === 'featured') {
-        cta = '<a class="btn" href="#/package/' + esc(C.featuredPackageId) + '">' + esc(t(k + 'cta')) + '</a>';
+        var fp = state.byId[C.featuredPackageId];
+        var label = t(k + 'cta') + (fp ? ' · ' + (isFree(fp) ? t('card.free') : money(fp.total_price, fp.currency)) : '');
+        cta = '<a class="btn" href="#/package/' + esc(C.featuredPackageId) + '">' + esc(label) + '</a>';
+        check = '<p class="hero-check">' + esc(t('hero.keymaster')) + '</p>';
       } else if (s.target === 'all') {
         cta = '<button type="button" class="btn" data-scroll="products">' + esc(t(k + 'cta')) + '</button>';
         second = '<a class="btn-2" href="' + esc(C.discordUrl) + '" target="_blank" rel="noopener">' + esc(t('hero.discord')) + '</a>';
@@ -360,7 +411,7 @@
         '<div class="slide-copy"><p class="tag">' + esc(t(k + 'tag')) + '</p>' +
         '<' + hTag + '>' + esc(t(k + 'title')) + ' <span>' + esc(t(k + 'accent')) + '</span></' + hTag + '>' +
         '<p class="slide-sub">' + esc(t(k + 'sub')) + '</p>' +
-        '<div class="slide-cta">' + cta + second + '</div></div></div>';
+        '<div class="slide-cta">' + cta + second + '</div>' + check + '</div></div>';
     });
     out += '<span class="hud-c tl"></span><span class="hud-c tr"></span><span class="hud-c bl"></span><span class="hud-c br"></span>' +
       '<div class="read" aria-hidden="true"><span>313 // CREW</span><span>DROP 01</span><span>ONLINE</span></div>' +
@@ -400,31 +451,120 @@
     return '<div class="wrap state"><p>' + esc(t('error.load')) + '</p><button type="button" class="btn" data-retry>' + esc(t('error.retry')) + '</button></div>';
   }
 
+  /* Home rows: a short curated "New drop", then free items, then the rest. */
+  function byNewest(a, b) { return String(b.created_at).localeCompare(String(a.created_at)) || Number(b.total_price) - Number(a.total_price); }
+  function newDropPkgs() {
+    var picked = [];
+    (C.newDrop || []).forEach(function (id) { var p = state.byId[id]; if (p && picked.indexOf(p) < 0) picked.push(p); });
+    var want = Math.max((C.newDrop || []).length, 3);
+    state.pkgs.filter(function (p) { return !isFree(p) && picked.indexOf(p) < 0 && p.id !== (C.upcoming || {}).duoPackageId; })
+      .sort(byNewest).forEach(function (p) { if (picked.length < want) picked.push(p); });
+    return picked;
+  }
+  function freePkgs() { return state.pkgs.filter(isFree).sort(byNewest).slice(0, C.rowLimit || 4); }
+  function morePkgs(exclude) {
+    return state.pkgs.filter(function (p) { return !isFree(p) && exclude.indexOf(p) < 0 && p.id !== (C.upcoming || {}).duoPackageId; })
+      .sort(byNewest).slice(0, C.rowLimit || 4);
+  }
+  function minPrice(pkgs) {
+    var paid = pkgs.filter(function (p) { return !isFree(p); });
+    if (!paid.length) return null;
+    var p = paid.reduce(function (a, b) { return Number(b.total_price) < Number(a.total_price) ? b : a; });
+    return money(p.total_price, p.currency);
+  }
+  function gridClass(n) { return 'grid' + (n === 3 ? ' cols-3' : ''); }
+
+  function rowHtml(id, title, sub, pkgs, link) {
+    if (!pkgs.length) return '';
+    return '<section id="' + id + '" aria-labelledby="' + id + '-h"><div class="sec-h"><div><h2 id="' + id + '-h">' + esc(title) + '</h2>' +
+      (sub ? '<p class="sec-sub">' + esc(sub) + '</p>' : '') + '</div>' + (link || '') + '</div>' +
+      '<div class="' + gridClass(pkgs.length) + '">' + pkgs.map(cardHtml).join('') + '</div></section>';
+  }
+
+  function statsHtml() {
+    var free = state.pkgs.filter(isFree).length;
+    var items = [[String(state.pkgs.length), t('stats.items')]];
+    if (free) items.push([String(free), t('stats.free')]);
+    items.push([t('stats.instant'), t('stats.delivery')]);
+    return '<div class="stats">' + items.map(function (s) { return '<div><b>' + esc(s[0]) + '</b><span>' + esc(s[1]) + '</span></div>'; }).join('') + '</div>';
+  }
+
+  function catsHtml() {
+    var cats = (state.cats || []).filter(function (c) { return c.packages.length; });
+    if (!cats.length) return '';
+    return '<section aria-labelledby="cats-h"><div class="sec-h"><h2 id="cats-h">' + esc(t('cats.title')) + '</h2></div><div class="cats">' + cats.map(function (c) {
+      var from = minPrice(c.packages);
+      var line = from ? t('cats.from', { n: c.packages.length, p: from }) : t('cats.free', { n: c.packages.length });
+      return '<a class="cat" href="#/category/' + c.id + '">' + iconFor(c) + '<span><b>' + esc(c.name) + '</b><small>' +
+        esc(line) + '</small></span><span class="go" aria-hidden="true">→</span></a>';
+    }).join('') + '</div></section>';
+  }
+
+  /* Bundle maths: the Duo price against buying its parts one by one. */
+  function duoInfo() {
+    var u = C.upcoming || {};
+    var duo = u.duoPackageId ? state.byId[u.duoPackageId] : null;
+    if (!duo) return null;
+    var parts = (u.duoIncludes || []).map(function (id) { return state.byId[id]; }).filter(Boolean);
+    var sum = parts.reduce(function (a, p) { return a + Number(p.total_price); }, 0);
+    var save = Math.max(0, sum - Number(duo.total_price));
+    return { pkg: duo, parts: parts, sum: sum, save: save };
+  }
+
+  function upcomingHtml() {
+    var u = C.upcoming;
+    if (!u || !u.enabled) return '';
+    var k = 'up.' + u.key + '.';
+    var duo = duoInfo();
+    if (duo) {
+      var p = duo.pkg, inB = inBasket(p.id);
+      return '<section class="duo" aria-labelledby="duo-h"><div class="duo-copy"><p class="tag">' + esc(t('duo.tag')) + '</p>' +
+        '<h2 id="duo-h">' + esc(p.name) + '</h2><ul class="duo-parts">' + duo.parts.map(function (x) {
+          return '<li><span>' + esc(x.name) + '</span><b>' + esc(money(x.total_price, x.currency)) + '</b></li>';
+        }).join('') + '</ul><div class="big-price">' + esc(money(p.total_price, p.currency)) +
+        (duo.save > 0 ? ' <s>' + esc(money(duo.sum, p.currency)) + '</s> <span class="save">' + esc(t('duo.save', { p: money(duo.save, p.currency) })) + '</span>' : '') + '</div>' +
+        '<div class="slide-cta"><button type="button" class="btn' + (inB ? ' in' : '') + '" data-add="' + esc(p.ident) + '" data-big="1" data-duo="1">' + esc(inB ? t('pkg.in') : t('duo.add')) + '</button>' +
+        '<button type="button" class="btn-2" data-open="' + p.id + '">' + esc(t('card.view')) + '</button></div></div>' +
+        '<button type="button" class="duo-img" data-open="' + p.id + '" aria-label="' + esc(t('card.view') + ': ' + p.name) + '">' +
+        (p.image ? '<img src="' + esc(p.image) + '" alt="" loading="lazy">' : ICONS.packs) + '</button></section>';
+    }
+    if (u.packageId && state.byId[u.packageId]) return '';
+    var featured = state.byId[C.featuredPackageId];
+    return '<section class="soon" aria-labelledby="soon-h"><div class="soon-copy"><p class="tag">' + esc(t(k + 'tag')) + '</p>' +
+      '<h2 id="soon-h">' + esc(t(k + 'title')) + ' <span>' + esc(t(k + 'accent')) + '</span></h2>' +
+      '<p class="slide-sub">' + esc(t(k + 'sub')) + '</p><p class="soon-offer">' + esc(t(k + 'offer')) + '</p>' +
+      '<div class="slide-cta"><a class="btn" href="' + esc(C.discordUrl) + '" target="_blank" rel="noopener">' + esc(t('up.notify')) + '</a>' +
+      (featured ? '<a class="btn-2" href="#/package/' + featured.id + '">' + esc(t('up.shop')) + '</a>' : '') + '</div></div>' +
+      '<div class="soon-art" aria-hidden="true"><span class="soon-stamp">' + esc(t(k + 'tag')) + '</span><b>F</b><i>V1</i></div></section>';
+  }
+
+  function deliveryFaqHtml() {
+    var faq = t('faq');
+    if (!Array.isArray(faq)) faq = [];
+    return '<section class="help" aria-label="' + esc(t('how.title')) + '"><div class="how" id="delivery"><h2>' + esc(t('how.title')) + '</h2>' +
+      '<p class="sec-sub">' + esc(t('how.sub')) + '</p><ol class="steps">' + [1, 2, 3].map(function (n) {
+        return '<li><span class="n" aria-hidden="true">' + n + '</span><div><b>' + esc(t('how.' + n + '.t')) + '</b><p>' + esc(t('how.' + n + '.d')) + '</p></div></li>';
+      }).join('') + '</ol><p class="stuck">' + esc(t('how.stuck')) + ' <a href="' + esc(C.discordUrl) + '" target="_blank" rel="noopener">' + esc(t('how.ticket')) + '</a>.</p></div>' +
+      '<div class="faq" id="faq"><h2>' + esc(t('faq.title')) + '</h2>' + faq.map(function (qa) {
+        return '<details><summary>' + esc(qa[0]) + '</summary><p>' + esc(qa[1]) + '</p></details>';
+      }).join('') + '</div></section>';
+  }
+
   function homeHtml() {
     var html = '<div class="wrap">' + heroHtml();
-    var cats = (state.cats || []).filter(function (c) { return c.packages.length; });
     if (state.loading) {
-      html += '<div class="cats"><div class="cat skel"></div><div class="cat skel"></div><div class="cat skel"></div></div>';
-    } else if (cats.length) {
-      html += '<div class="sec-h"><h2>' + esc(t('cats.title')) + '</h2></div><div class="cats">' + cats.map(function (c) {
-        return '<a class="cat" href="#/category/' + c.id + '">' + iconFor(c) + '<span><b>' + esc(c.name) + '</b><small>' +
-          esc(count(c.packages.length, 'cats.count1', 'cats.count')) + '</small></span><span class="go" aria-hidden="true">→</span></a>';
-      }).join('') + '</div>';
+      html += '<div class="sec-h"><h2>' + esc(t('drop.title')) + '</h2></div><div class="grid cols-3">' + skeletonCards(3) + '</div>';
+    } else {
+      html += statsHtml();
+      var drop = newDropPkgs();
+      html += rowHtml('products', t('drop.title'), t('drop.sub'), drop, '<a href="#/all">' + esc(t('drop.all')) + ' →</a>');
+      html += upcomingHtml();
+      html += rowHtml('free', t('free.title'), t('free.sub'), freePkgs(), '');
+      var more = morePkgs(drop);
+      html += rowHtml('more', t('more.title'), minPrice(more) ? t('more.sub', { p: minPrice(more) }) : '', more, '<a href="#/all">' + esc(t('drop.all')) + ' →</a>');
+      html += catsHtml();
     }
-    html += '<section id="products" aria-labelledby="drop-h"><div class="sec-h"><h2 id="drop-h">' + esc(t('drop.title')) + '</h2>' +
-      (state.pkgs.length > C.newDropLimit ? '<a href="#/all">' + esc(t('drop.all')) + ' →</a>' : '') + '</div><div class="grid">';
-    if (state.loading) html += skeletonCards(4);
-    else {
-      var featured = state.byId[C.featuredPackageId];
-      var newest = state.pkgs.filter(function (p) { return p !== featured; })
-        .sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); });
-      if (featured) newest.unshift(featured);
-      html += newest.slice(0, C.newDropLimit).map(cardHtml).join('');
-    }
-    html += '</div></section>';
-    html += '<div class="info">' + [1, 2, 3, 4].map(function (n) {
-      return '<div><b>' + esc(t('info.' + n + '.t')) + '</b><span>' + esc(t('info.' + n + '.d')) + '</span></div>';
-    }).join('') + '</div>';
+    html += deliveryFaqHtml();
     var saved = lsGet(KEYS.code) || '';
     html += '<form class="code-box" id="home-code"><div><h2>' + esc(t('code.title')) + '</h2><p>' + esc(t('code.text')) + '</p></div>' +
       '<div class="field"><label class="sr" for="home-code-in">' + esc(t('code.ph')) + '</label><input class="input" id="home-code-in" name="code" autocomplete="off" maxlength="40" placeholder="' + esc(t('code.ph')) + '" value="' + esc(saved) + '">' +
@@ -503,6 +643,7 @@
     var p = state.byId[id];
     var sheet = $('#pkg');
     if (!p) return;
+    closeBasket();
     var media = (p.media || []).filter(function (m) { return m.type === 'image' && m.url; });
     if (!media.length && p.image) media = [{ url: p.image }];
     var videos = (p.media || []).filter(function (m) { return m.type === 'video' && m.url; });
@@ -512,17 +653,24 @@
       return '<button type="button" data-thumb="' + esc(m.url) + '"' + (i === 0 ? ' aria-current="true"' : '') + ' aria-label="' + (i + 1) + ' / ' + media.length + '"><img src="' + esc(m.url) + '" alt="" loading="lazy"></button>';
     }).join('') + '</div>' : '';
     var vids = videos.map(function (v) { return '<a class="btn-2" href="' + esc(v.url) + '" target="_blank" rel="noopener">▶ Video</a>'; }).join(' ');
-    var chips = chipsHtml(p);
+    var chips = chipsHtml(p) + detailChips(p);
     var label = inB ? t('pkg.in') : (free ? t('pkg.get') : t('pkg.add') + ' · ' + money(p.total_price, p.currency));
+    var duo = duoInfo(), upsell = '';
+    if (duo && duo.pkg.id !== p.id && duo.parts.indexOf(p) >= 0 && duo.save > 0) {
+      upsell = '<button type="button" class="upsell" data-open="' + duo.pkg.id + '"><span>' + esc(t('duo.upsell', { name: duo.pkg.name, p: money(duo.save, duo.pkg.currency) })) +
+        '</span><b>' + esc(money(duo.pkg.total_price, duo.pkg.currency)) + ' →</b></button>';
+    }
+    var trust = t('pkg.trust');
+    trust = Array.isArray(trust) ? '<ul class="trust">' + trust.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '';
     sheet.innerHTML =
       '<div class="sheet-grid"><div class="sheet-media"><div class="sheet-main-img">' + main + '</div>' + thumbs + (vids ? '<div style="padding:0 10px 10px">' + vids + '</div>' : '') + '</div>' +
       '<div class="sheet-info"><div class="sheet-top"><div><p class="tag">' + esc(p._cat ? p._cat.name : '') + '</p><h2 id="pkg-name">' + esc(p.name) + '</h2></div>' +
       '<button type="button" class="x" data-close-pkg aria-label="' + esc(t('pkg.close')) + '">✕</button></div>' +
       (chips ? '<div class="chips-inline">' + chips + '</div>' : '') +
-      '<div class="big-price">' + priceHtml(p) + '</div>' +
-      '<div class="desc" id="pkg-desc"></div>' +
+      '<div class="big-price">' + priceHtml(p) + '</div>' + upsell +
+      '<div class="desc" id="pkg-desc"></div>' + trust +
       '<div class="sheet-cta"><button type="button" class="btn btn-full' + (inB ? ' in' : '') + '" data-add="' + esc(p.ident) + '" data-big="1">' + esc(label) + '</button>' +
-      '<p class="small-note">' + esc(t('pkg.delivery')) + '</p></div></div></div>';
+      '<p class="small-note">' + esc(isAuthed() ? t('pkg.delivery') : t('pkg.loginnote')) + '</p></div></div></div>';
     renderDescription(p.description, $('#pkg-desc'));
     if (sheet.hidden) lastFocus = document.activeElement;
     $('#pkg-overlay').hidden = false;
@@ -589,6 +737,11 @@
         }).join('');
         if (b.creator_code) body += '<p class="code-on">' + esc(t('basket.code.on', { c: b.creator_code })) + '</p>';
         else body += '<form class="field" id="basket-code"><label class="sr" for="basket-code-in">' + esc(t('basket.code.ph')) + '</label><input class="input" id="basket-code-in" autocomplete="off" maxlength="40" placeholder="' + esc(t('basket.code.ph')) + '" value="' + esc(lsGet(KEYS.code) || '') + '"><button type="submit" class="btn-2">' + esc(t('basket.code.apply')) + '</button></form>';
+        (b.coupons || []).forEach(function (c) {
+          var code = c.code || c.coupon_code || '';
+          body += '<p class="code-on coupon-on"><span>' + esc(t('basket.coupon.on', { c: code })) + '</span><button type="button" class="rm" data-uncoupon="' + esc(code) + '">' + esc(t('basket.coupon.remove')) + '</button></p>';
+        });
+        body += '<form class="field" id="basket-coupon"><label class="sr" for="basket-coupon-in">' + esc(t('basket.coupon.ph')) + '</label><input class="input" id="basket-coupon-in" autocomplete="off" maxlength="40" placeholder="' + esc(t('basket.coupon.ph')) + '" value="' + esc(lsGet(KEYS.coupon) || '') + '"><button type="submit" class="btn-2">' + esc(t('basket.code.apply')) + '</button></form>';
         body += '<dl class="sum"><dt>' + esc(t('basket.subtotal')) + '</dt><dd>' + esc(money(b.base_price, b.currency)) + '</dd>' +
           (Number(b.sales_tax) > 0 ? '<dt>' + esc(t('basket.tax')) + '</dt><dd>' + esc(money(b.sales_tax, b.currency)) + '</dd>' : '') +
           '<dt class="tot">' + esc(t('basket.total')) + '</dt><dd class="tot">' + esc(money(b.total_price, b.currency)) + '</dd></dl>';
@@ -609,6 +762,7 @@
       if (!p) return;
       var inB = inBasket(p.id), big = btn.hasAttribute('data-big');
       btn.classList.toggle('in', inB);
+      if (btn.hasAttribute('data-duo')) { btn.textContent = inB ? t('pkg.in') : t('duo.add'); return; }
       btn.textContent = inB ? t(big ? 'pkg.in' : 'card.in')
         : (isFree(p) ? t(big ? 'pkg.get' : 'card.get') : (big ? t('pkg.add') + ' · ' + money(p.total_price, p.currency) : t('card.add')));
     });
@@ -625,6 +779,121 @@
   function fail(e) { if (window.console) console.error(e); toast(t('toast.error')); }
   function busy(btn, on) { if (btn) btn.disabled = on; }
 
+  /* ---------- Offers: welcome call and basket gift ---------- */
+  var ICON_CALL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>';
+  var offerOpen = null, offerFocus = null;
+
+  function openOffer(kind, html) {
+    var o = $('#offer');
+    if (!offerOpen) offerFocus = document.activeElement;
+    offerOpen = kind;
+    o.innerHTML = '<div class="offer-card offer-' + kind + '">' + html + '</div>';
+    o.hidden = false;
+    $('#offer-overlay').hidden = false;
+    lock(true);
+    var f = $('[data-autofocus]', o) || $('button', o);
+    if (f) f.focus();
+  }
+  function closeOffer() {
+    if (!offerOpen) return;
+    offerOpen = null;
+    $('#offer').hidden = true;
+    $('#offer-overlay').hidden = true;
+    if ($('#basket').hidden && $('#pkg').hidden) lock(false);
+    if (offerFocus && offerFocus.focus) offerFocus.focus();
+  }
+  function canOffer() {
+    return !offerOpen && $('#pkg').hidden && $('#basket').hidden && state.view.name !== 'thanks' && !document.hidden && !state.loading;
+  }
+
+  function callHtml() {
+    var o = C.welcomeOffer, p = o.percent;
+    var perks = [1, 2, 3].map(function (n) {
+      return '<li><b>' + esc(t('call.b' + n + '.t', { p: p })) + '</b><span>' + esc(t('call.b' + n + '.d')) + '</span></li>';
+    }).join('');
+    return '<button type="button" class="x offer-x" data-offer="decline" aria-label="' + esc(t('call.close')) + '">✕</button>' +
+      '<div class="offer-copy"><p class="tag">313 Mods</p><h2 id="offer-h">' + esc(t('call.title', { p: p })) + '</h2>' +
+      '<p class="offer-sub">' + esc(t('call.sub')) + '</p><ul class="perks">' + perks + '</ul>' +
+      '<div class="offer-code" id="offer-code" hidden><p class="tag">' + esc(t('call.got')) + '</p>' +
+      '<div class="code-row"><code id="offer-code-v">' + esc(o.code) + '</code><button type="button" class="btn-2" data-offer="copy">' + esc(t('call.copy')) + '</button></div>' +
+      '<p class="small-note">' + esc(t('call.gotsub')) + '</p><button type="button" class="btn" data-offer="shop">' + esc(t('call.shop')) + '</button></div></div>' +
+      '<div class="phone"><div class="phone-screen"><span class="notch" aria-hidden="true"></span>' +
+      '<div class="caller"><span class="avatar"><img src="assets/img/icon.svg" alt=""></span><b>313 Mods</b>' +
+      '<small id="call-status">' + esc(t('call.calling')) + '<span class="ell" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></small></div>' +
+      '<div class="call-btns" id="call-btns">' +
+      '<button type="button" class="call-btn decline" data-offer="decline"><i>' + ICON_CALL + '</i>' + esc(t('call.decline')) + '</button>' +
+      '<button type="button" class="call-btn accept" data-offer="accept" data-autofocus><i>' + ICON_CALL + '</i>' + esc(t('call.accept')) + '</button></div>' +
+      '<div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>';
+  }
+  function acceptCall() {
+    var o = C.welcomeOffer, card = $('.offer-card');
+    lsSet(KEYS.call, 'accepted');
+    lsSet(KEYS.coupon, o.code);
+    if (card) card.classList.add('connected');
+    var st = $('#call-status'); if (st) st.textContent = t('call.connected');
+    var b = $('#call-btns'); if (b) b.hidden = true;
+    var perks = $('.offer-card .perks'); if (perks) perks.hidden = true;
+    var code = $('#offer-code'); if (code) code.hidden = false;
+    var copy = $('[data-offer="copy"]'); if (copy) copy.focus();
+    if (isAuthed()) applyCoupon(o.code, false);
+  }
+  function copyOfferCode(btn) {
+    var el = $('#offer-code-v'); if (!el) return;
+    var done = function () { btn.textContent = t('call.copied'); };
+    var fallback = function () { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); };
+    try { navigator.clipboard.writeText(el.textContent).then(done, fallback); } catch (e) { fallback(); }
+  }
+  function maybeWelcome() {
+    var o = C.welcomeOffer;
+    if (!o || !o.enabled || lsGet(KEYS.call)) return;
+    var tries = 0;
+    (function wait(delay) {
+      setTimeout(function () {
+        if (lsGet(KEYS.call) || basketCount() > 0) return;
+        if (!canOffer()) { if (++tries < 6) wait(10000); return; }
+        lsSet(KEYS.call, 'shown');
+        openOffer('call', callHtml());
+      }, delay);
+    })((o.delaySeconds || 8) * 1000);
+  }
+
+  function giftHtml(names) {
+    var g = C.basketGift;
+    var item = names.length > 1 ? t('gift.more', { item: names[0], n: names.length - 1 }) : (names[0] || '');
+    return '<button type="button" class="x offer-x" data-offer="gift-later" aria-label="' + esc(t('call.close')) + '">✕</button>' +
+      '<div class="offer-copy"><p class="tag">313 Mods</p><h2 id="offer-h">' + esc(t('gift.title')) + '</h2>' +
+      '<p class="offer-sub">' + esc(t('gift.msg', { item: item, p: g.percent })) + '</p>' +
+      '<div class="slide-cta"><button type="button" class="btn" data-offer="gift-apply" data-autofocus>' + esc(t('gift.apply', { p: g.percent })) + '</button>' +
+      '<button type="button" class="btn-2" data-offer="gift-later">' + esc(t('gift.later')) + '</button></div></div>' +
+      '<div class="phone"><div class="phone-screen msg"><span class="notch" aria-hidden="true"></span>' +
+      '<div class="msg-head"><span class="avatar sm"><img src="assets/img/icon.svg" alt=""></span><b>313 Mods</b><small>' + esc(t('gift.now')) + '</small></div>' +
+      '<div class="bubble">' + esc(t('gift.msg', { item: item, p: g.percent })) + '</div><div class="bubble code">' + esc(g.code) + '</div></div></div>';
+  }
+  function giftEligible() {
+    var g = C.basketGift, b = state.basket;
+    return !!(g && g.enabled && b && isAuthed() && basketCount() > 0 && !(b.coupons && b.coupons.length) && lsGet(KEYS.gift) !== b.ident);
+  }
+  function showGift() {
+    lsSet(KEYS.gift, state.basket.ident);
+    openOffer('gift', giftHtml(state.basket.packages.map(function (p) { return p.name; })));
+  }
+  function maybeGiftOnReturn(prevSeen) {
+    if (!giftEligible() || !prevSeen) return;
+    var mins = (Date.now() - Number(prevSeen)) / 60000;
+    if (mins < (C.basketGift.afterMinutes || 30)) return;
+    setTimeout(function () { if (giftEligible() && canOffer()) showGift(); }, 2500);
+  }
+  function applyGift() {
+    var code = C.basketGift.code;
+    if (!giftEligible() && !(state.basket && basketCount() > 0)) { closeOffer(); return; }
+    applyCoupon(code, false).then(function (ok) { closeOffer(); if (ok) openBasket(); });
+  }
+  // Leaving the page with items in the basket (desktop: the pointer heads for the tab bar).
+  document.addEventListener('mouseout', function (e) {
+    if (e.relatedTarget || e.clientY > 0) return;
+    if (giftEligible() && canOffer()) showGift();
+  });
+
   /* ---------- Routing ---------- */
   function parseHash() {
     var h = location.hash.replace(/^#/, '');
@@ -633,6 +902,7 @@
     if ((m = h.match(/^\/category\/(\d+)/))) return { name: 'category', id: Number(m[1]) };
     if (h === '/all') return { name: 'all' };
     if (h === '/thanks') return { name: 'thanks' };
+    if (h === '/faq' || h === '/delivery') return { name: 'home', anchor: h.slice(1) };
     return { name: 'home' };
   }
   function route() {
@@ -646,15 +916,31 @@
     closePackage(true);
     state.cameFromList = false;
     if (r.name === 'thanks') { lsSet(KEYS.basket, null); state.basket = null; updateCount(); }
+    var anchor = r.anchor; delete r.anchor;
     var changed = JSON.stringify(r) !== JSON.stringify(state.view) || !state.viewRendered;
     if (changed && r.name === 'home') state.slide = 0;
     state.view = r;
     if (changed) { render(); state.viewRendered = true; window.scrollTo(0, 0); }
+    if (anchor) scrollToId(anchor);
+  }
+  function scrollToId(id) {
+    var el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
   }
 
   /* ---------- Events ---------- */
   document.addEventListener('click', function (e) {
     var el;
+    if ((el = e.target.closest('[data-offer]'))) {
+      var a = el.getAttribute('data-offer');
+      if (a === 'accept') acceptCall();
+      else if (a === 'decline') { lsSet(KEYS.call, 'declined'); closeOffer(); }
+      else if (a === 'copy') copyOfferCode(el);
+      else if (a === 'shop') { closeOffer(); scrollToId('products'); }
+      else if (a === 'gift-apply') applyGift();
+      else if (a === 'gift-later') closeOffer();
+      return;
+    }
     if ((el = e.target.closest('[data-open]'))) {
       state.cameFromList = true;
       location.hash = '#/package/' + el.getAttribute('data-open');
@@ -662,6 +948,7 @@
     }
     if ((el = e.target.closest('[data-add]'))) { addPackage(el.getAttribute('data-add'), el); return; }
     if ((el = e.target.closest('[data-remove]'))) { removePackage(Number(el.getAttribute('data-remove'))); return; }
+    if ((el = e.target.closest('[data-uncoupon]'))) { removeCoupon(el.getAttribute('data-uncoupon')); return; }
     if ((el = e.target.closest('[data-login]'))) { login(el.getAttribute('data-login') || null); return; }
     if ((el = e.target.closest('[data-close-pkg]'))) { closePackage(false); return; }
     if ((el = e.target.closest('[data-close-basket]'))) { closeBasket(); return; }
@@ -677,12 +964,9 @@
       showSlide(v === 'prev' ? state.slide - 1 : v === 'next' ? state.slide + 1 : Number(v));
       return;
     }
-    if ((el = e.target.closest('[data-scroll]'))) {
-      var target = document.getElementById(el.getAttribute('data-scroll'));
-      if (target) target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
-      return;
-    }
+    if ((el = e.target.closest('[data-scroll]'))) { scrollToId(el.getAttribute('data-scroll')); return; }
     if ((el = e.target.closest('[data-retry]'))) { loadStore(); return; }
+    if (e.target.id === 'offer-overlay') { if (offerOpen === 'call') lsSet(KEYS.call, 'declined'); closeOffer(); return; }
     if (e.target.id === 'pkg-overlay') { if (!$('#basket').hidden) closeBasket(); else closePackage(false); }
   });
 
@@ -698,12 +982,16 @@
     } else if (f.id === 'basket-code') {
       e.preventDefault();
       applyCreatorCode($('#basket-code-in').value);
+    } else if (f.id === 'basket-coupon') {
+      e.preventDefault();
+      applyCoupon($('#basket-coupon-in').value, false);
     }
   });
 
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
-    if (!$('#basket').hidden) closeBasket();
+    if (offerOpen) { if (offerOpen === 'call' && !$('.offer-card.connected')) lsSet(KEYS.call, 'declined'); closeOffer(); }
+    else if (!$('#basket').hidden) closeBasket();
     else if (!$('#pkg').hidden) closePackage(false);
   });
 
@@ -730,31 +1018,54 @@
   function handleReturnFromLogin() {
     var params = new URLSearchParams(location.search);
     var add = params.get('add'), openB = params.get('basket');
-    if (!add && !openB) return;
+    if (!add && !openB) return false;
     history.replaceState(null, '', siteUrl() + location.hash);
-    if (!isAuthed()) { if (openB || add) openBasket(add); return; }
-    var saved = lsGet(KEYS.code);
-    var next = saved && !state.basket.creator_code ? applyCreatorCode(saved) : Promise.resolve();
-    next.then(function () {
-      if (add) { addPackage(add, null); }
+    if (!isAuthed()) { openBasket(add); return true; }
+    applySavedCodes().then(function () {
+      if (add) addPackage(add, null);
       openBasket();
     });
+    return true;
+  }
+  // ?preview=call or ?preview=gift shows a pop-up on demand, to check how it looks.
+  function handlePreview() {
+    var p = new URLSearchParams(location.search).get('preview');
+    if (p !== 'call' && p !== 'gift') return false;
+    history.replaceState(null, '', siteUrl() + location.hash);
+    if (p === 'call') openOffer('call', callHtml());
+    else {
+      var names = state.basket && basketCount() ? state.basket.packages.map(function (x) { return x.name; })
+        : [(state.byId[C.featuredPackageId] || state.pkgs[0] || { name: '313 MALE V1' }).name];
+      openOffer('gift', giftHtml(names));
+    }
+    return true;
   }
 
+  var prevSeen = lsGet(KEYS.seen);
+  var markSeen = function () { lsSet(KEYS.seen, String(Date.now())); };
+  markSeen();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) markSeen(); });
+  window.addEventListener('pagehide', markSeen);
+
   state.lang = detectLang();
-  ['#discord-head', '#discord-menu', '#discord-foot'].forEach(function (s) { $(s).href = C.discordUrl; });
+  ['#discord-head', '#discord-menu', '#discord-foot', '#discord-help'].forEach(function (s) { var a = $(s); if (a) a.href = C.discordUrl; });
   $('#year').textContent = String(new Date().getFullYear());
   applyStaticText();
   renderTicker();
   route();
-  loadStore().then(function () {
+  var storeReady = loadStore().then(function () {
     if (state.openWhenReady) { var id = state.openWhenReady; state.openWhenReady = null; openPackage(id); }
     refreshAddButtons();
   });
   state.basketLoading = true;
-  loadBasket().catch(function () { return null; }).then(function () {
+  var basketReady = loadBasket().catch(function () { return null; }).then(function () {
     state.basketLoading = false;
     refreshAddButtons();
-    handleReturnFromLogin();
+    if (!handleReturnFromLogin()) applySavedCodes();
+  });
+  Promise.all([storeReady, basketReady]).then(function () {
+    if (handlePreview()) return;
+    maybeGiftOnReturn(prevSeen);
+    maybeWelcome();
   });
 })();

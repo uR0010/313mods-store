@@ -9,9 +9,36 @@ window.SITE_CONFIG = {
   apiBase: 'https://headless.tebex.io/api',
   discordUrl: 'https://discord.gg/BgzbTF9DTR',
 
-  // How many products the "New drop" row shows on the home page.
-  newDropLimit: 8,
+  // The pack the homepage banner promotes.
   featuredPackageId: 7810095,
+
+  // "New drop" on the homepage: these Tebex package IDs, in this order.
+  // Male V1, Violet Hour Crewneck and Undertow Jeans make one full fit.
+  // If an ID disappears from Tebex, the newest paid item takes its place.
+  newDrop: [7810095, 7810461, 7810460],
+
+  // How many items the "Free drops" and "More pieces" rows show.
+  rowLimit: 4,
+
+  // Pop-up call when someone visits for the first time.
+  // The code must exist in Tebex: Engagement > Coupons.
+  welcomeOffer: { enabled: true, code: 'WELCOME10', percent: 10, delaySeconds: 8 },
+
+  // Text message gift for people who leave items in their basket.
+  // Shown when they come back after "afterMinutes", or when they move to close the tab.
+  // The code must exist in Tebex: Engagement > Coupons.
+  basketGift: { enabled: true, code: 'GIFT10', percent: 10, afterMinutes: 30 },
+
+  // Upcoming release and its launch bundle.
+  // Leave packageId as null until Female V1 is in Tebex; the homepage shows a "Coming soon" teaser.
+  // When you create the bundle package in Tebex, put its ID in duoPackageId and the IDs it contains in duoIncludes.
+  upcoming: {
+    enabled: true,
+    key: 'female-v1',
+    packageId: null,
+    duoPackageId: null,
+    duoIncludes: [7810095]
+  },
 
   // Carousel slides. "target" picks the category the main button opens:
   // "featured" opens the featured package, "all" scrolls to New Drop,
@@ -31,5 +58,8 @@ window.SITE_CONFIG = {
   compatibility: {
     fivem: /fivem|fxmanifest|cfx\.re|keymaster|escrow|qbcore|qb-core|\besx\b/i,
     story: /openiv|story mode|single ?player|menyoo|\.oiv\b/i
-  }
+  },
+
+  // Frameworks shown as labels on a product when its description names them.
+  frameworks: [['ESX', /\besx\b/i], ['QBCore', /qb-?core/i], ['QBX', /\bqbx\b/i], ['Standalone', /standalone/i]]
 };
