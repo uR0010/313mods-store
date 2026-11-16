@@ -276,6 +276,8 @@
       afterBasketChange();
       toast(t('toast.added'));
       bump();
+      var savedCoupon = lsGet(KEYS.coupon);
+      if (savedCoupon) applyCoupon(savedCoupon, true);
     }).catch(function (e) {
       if (/log ?in/i.test(e.message)) { state.basket.username = null; openBasket(ident); }
       else fail(e);
@@ -312,17 +314,23 @@
   }
   function applyCoupon(code, quiet) {
     code = String(code || '').trim().toUpperCase();
-    if (!code || !state.basket) return Promise.resolve(false);
+    if (!code) return Promise.resolve(false);
     if (hasCoupon(code)) { lsSet(KEYS.coupon, null); return Promise.resolve(true); }
+    // Tebex only accepts a coupon once the basket holds an item it covers, so keep the code until then.
+    if (!state.basket || !isAuthed() || !basketCount()) {
+      lsSet(KEYS.coupon, code);
+      if (!quiet) toast(t('toast.coupon_later'));
+      return Promise.resolve(false);
+    }
     return api(ACC + '/baskets/' + encodeURIComponent(state.basket.ident) + '/coupons', {
       method: 'POST', body: { coupon_code: code }
     }).then(function (j) {
       if (j && j.success === false) throw new Error(j.message || 'bad coupon');
       lsSet(KEYS.coupon, null);
-      return loadBasket().then(function () { afterBasketChange(); if (!quiet) toast(t('toast.coupon_ok')); return true; });
-    }).catch(function () {
-      lsSet(KEYS.coupon, null);
-      toast(t('toast.coupon_bad'));
+      return loadBasket().then(function () { afterBasketChange(); toast(t('toast.coupon_ok')); return true; });
+    }).catch(function (e) {
+      if (e && e.status === 400) { lsSet(KEYS.coupon, code); if (!quiet) toast(t('toast.coupon_items')); }
+      else { lsSet(KEYS.coupon, null); toast(t('toast.coupon_bad')); }
       return false;
     });
   }
@@ -337,7 +345,7 @@
     if (!isAuthed()) return Promise.resolve();
     var creator = lsGet(KEYS.code), coupon = lsGet(KEYS.coupon);
     var next = creator && !state.basket.creator_code ? applyCreatorCode(creator) : Promise.resolve();
-    return next.then(function () { return coupon ? applyCoupon(coupon, false) : null; });
+    return next.then(function () { return coupon ? applyCoupon(coupon, true) : null; });
   }
 
   function afterBasketChange() {
@@ -835,7 +843,7 @@
     var perks = $('.offer-card .perks'); if (perks) perks.hidden = true;
     var code = $('#offer-code'); if (code) code.hidden = false;
     var copy = $('[data-offer="copy"]'); if (copy) copy.focus();
-    if (isAuthed()) applyCoupon(o.code, false);
+    applyCoupon(o.code, true);
   }
   function copyOfferCode(btn) {
     var el = $('#offer-code-v'); if (!el) return;
