@@ -22,7 +22,7 @@ window.SITE_CONFIG = {
 
   // Pop-up call when someone visits for the first time.
   // The code must exist in Tebex: Engagement > Coupons.
-  welcomeOffer: { enabled: true, code: 'WELCOME10', percent: 10, delaySeconds: 8 },
+  welcomeOffer: { enabled: true, code: 'WELCOME10', percent: 10, delaySeconds: 3 },
 
   // Text message gift for people who leave items in their basket.
   // Shown when they come back after "afterMinutes", or when they move to close the tab.
