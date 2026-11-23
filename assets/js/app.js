@@ -6,6 +6,7 @@
   var I = window.I18N;
   var API = C.apiBase;
   var ACC = API + '/accounts/' + encodeURIComponent(C.publicToken);
+  var storeTitle = document.title;
   var KEYS = {
     basket: '313mods.basket', lang: '313mods.lang', code: '313mods.code',
     coupon: '313mods.coupon', call: '313mods.call', gift: '313mods.gift', seen: '313mods.seen'
@@ -68,6 +69,13 @@
   function priceHtml(p) {
     if (isFree(p)) return esc(t('card.free'));
     var html = esc(money(p.total_price, p.currency));
+    var campaign = activeCampaign();
+    if (campaign && p.currency === 'USD' && Number(p.total_price) > 0 && !Number(p.discount) && !Number(p.sales_tax)) {
+      var total = Math.round(Number(p.total_price) * 100);
+      var discounted = (total - Math.round(total * campaign.percent / 100)) / 100;
+      return '<s>' + html + '</s> <span>' + esc(money(discounted, p.currency)) + '</span>' +
+        ' <small class="campaign-price">' + esc(t('cyber.price', { c: campaign.code })) + '</small>';
+    }
     if (Number(p.discount) > 0) html += ' <s>' + esc(money(Number(p.total_price) + Number(p.discount), p.currency)) + '</s>';
     return html;
   }
@@ -122,6 +130,7 @@
 
   /* ---------- Icons ---------- */
   var ICONS = {
+    scripts: '<svg viewBox="0 0 120 90" aria-hidden="true"><path fill="none" stroke="#C4A6FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m41 25-22 20 22 20m38-40 22 20-22 20M67 17 53 73"/></svg>',
     clothing: '<svg viewBox="0 0 120 90" aria-hidden="true"><path fill="rgba(155,107,255,.1)" stroke="#C4A6FF" stroke-width="2" stroke-linejoin="round" d="M42 12 Q60 0 78 12 L98 20 L114 46 L102 54 L92 40 V86 H28 V40 L18 54 L6 46 L22 20 Z"/><path fill="none" stroke="#C4A6FF" stroke-width="2" stroke-linecap="round" d="M46 14 Q60 32 74 14 M55 25 V40 M65 25 V40 M42 62 H78 L74 76 H46 Z"/></svg>',
     weapons: '<svg viewBox="0 0 120 90" aria-hidden="true"><path fill="rgba(155,107,255,.1)" stroke="#C4A6FF" stroke-width="2" stroke-linejoin="round" d="M12 28 H102 L108 33 V44 H62 L58 49 H50 L45 72 L43 82 H27 L31 60 L35 44 H12 Z"/><path fill="none" stroke="#C4A6FF" stroke-width="2" stroke-linecap="round" d="M50 49 Q50 60 61 57 M80 32 V40 M85 32 V40 M90 32 V40"/></svg>',
     packs: '<svg viewBox="0 0 120 90" aria-hidden="true"><path fill="rgba(155,107,255,.1)" stroke="#C4A6FF" stroke-width="2" stroke-linejoin="round" d="M60 6 L104 24 V66 L60 84 L16 66 V24 Z"/><path fill="none" stroke="#C4A6FF" stroke-width="2" stroke-linejoin="round" d="M16 24 L60 42 L104 24 M60 42 V84 M38 15 L82 33 V46"/></svg>'
@@ -315,6 +324,11 @@
   function applyCoupon(code, quiet) {
     code = String(code || '').trim().toUpperCase();
     if (!code) return Promise.resolve(false);
+    if (C.campaign && code === C.campaign.code && !activeCampaign()) {
+      if (lsGet(KEYS.coupon) === code) lsSet(KEYS.coupon, null);
+      if (!quiet) toast(t('toast.coupon_bad'));
+      return Promise.resolve(false);
+    }
     if (hasCoupon(code)) { lsSet(KEYS.coupon, null); return Promise.resolve(true); }
     // Tebex only accepts a coupon once the basket holds an item it covers, so keep the code until then.
     if (!state.basket || !isAuthed() || !basketCount()) {
@@ -395,11 +409,10 @@
     var out = '<section class="hero"' + (slides.length > 1 ? ' aria-roledescription="carousel"' : '') + ' aria-label="313 Mods">';
     slides.forEach(function (s, i) {
       var k = 'hero.' + s.key + '.';
-      var cta = '', second = '', check = '';
+      var cta = '', second = '', check = '', fp = null;
       if (s.target === 'featured') {
-        var fp = state.byId[C.featuredPackageId];
-        var label = t(k + 'cta') + (fp ? ' · ' + (isFree(fp) ? t('card.free') : money(fp.total_price, fp.currency)) : '');
-        cta = '<a class="btn" href="#/package/' + esc(C.featuredPackageId) + '">' + esc(label) + '</a>';
+        fp = state.byId[C.featuredPackageId];
+        cta = '<a class="btn" href="#/package/' + esc(C.featuredPackageId) + '">' + esc(t(k + 'cta')) + '</a>';
         check = '<p class="hero-check">' + esc(t('hero.keymaster')) + '</p>';
       } else if (s.target === 'all') {
         cta = '<button type="button" class="btn" data-scroll="products">' + esc(t(k + 'cta')) + '</button>';
@@ -419,6 +432,7 @@
         '<div class="slide-copy"><p class="tag">' + esc(t(k + 'tag')) + '</p>' +
         '<' + hTag + '>' + esc(t(k + 'title')) + ' <span>' + esc(t(k + 'accent')) + '</span></' + hTag + '>' +
         '<p class="slide-sub">' + esc(t(k + 'sub')) + '</p>' +
+        (fp ? '<div class="hero-price price">' + priceHtml(fp) + '</div>' : '') +
         '<div class="slide-cta">' + cta + second + '</div>' + check + '</div></div>';
     });
     out += '<span class="hud-c tl"></span><span class="hud-c tr"></span><span class="hud-c bl"></span><span class="hud-c br"></span>' +
@@ -432,6 +446,19 @@
       out += '</div><button type="button" class="arrow" data-slide="next" aria-label="' + esc(t('hero.next')) + '">›</button></div>';
     }
     return out + '</section>';
+  }
+
+  function highlightsHtml() {
+    var items = (C.highlights || []).map(function (item) {
+      var p = state.byId[item.id];
+      if (!p) return '';
+      return '<a class="highlight" href="#/package/' + p.id + '">' +
+        '<div class="highlight-copy"><h2>' + esc(item.name) + '</h2><p>' + esc(t('highlight.' + item.key)) + '</p>' +
+        '<div class="price">' + priceHtml(p) + '</div></div>' +
+        '<div class="highlight-image">' + (p.image ? '<img src="' + esc(p.image) + '" alt="" decoding="async">' : iconFor(p._cat)) + '</div>' +
+        '<span class="highlight-arrow" aria-hidden="true">↗</span></a>';
+    }).join('');
+    return items ? '<div class="highlights">' + items + '</div>' : '';
   }
 
   function cardHtml(p) {
@@ -448,6 +475,7 @@
       '<div class="card-body"><h3><button type="button" data-open="' + p.id + '">' + esc(p.name) + '</button></h3>' +
       '<p class="card-cat">' + esc(p._cat ? p._cat.name : '') + '</p>' +
       '<div class="price">' + priceHtml(p) + '</div>' +
+      (C.scriptsBundle && p.id === C.scriptsBundle.id ? bundleSavingHtml(bundleInfo()) : '') +
       '<div class="card-btns"><button type="button" class="btn-view" data-open="' + p.id + '">' + esc(t('card.view')) + '</button>' +
       '<button type="button" class="btn-add' + (inB ? ' in' : '') + '" data-add="' + esc(p.ident) + '">' + esc(addLabel) + '</button></div></div>' +
       '</article>';
@@ -465,13 +493,13 @@
     var picked = [];
     (C.newDrop || []).forEach(function (id) { var p = state.byId[id]; if (p && picked.indexOf(p) < 0) picked.push(p); });
     var want = Math.max((C.newDrop || []).length, 3);
-    state.pkgs.filter(function (p) { return !isFree(p) && picked.indexOf(p) < 0 && p.id !== (C.upcoming || {}).duoPackageId; })
+    state.pkgs.filter(function (p) { return !isFree(p) && picked.indexOf(p) < 0 && p.id !== C.featuredPackageId; })
       .sort(byNewest).forEach(function (p) { if (picked.length < want) picked.push(p); });
     return picked;
   }
   function freePkgs() { return state.pkgs.filter(isFree).sort(byNewest).slice(0, C.rowLimit || 4); }
   function morePkgs(exclude) {
-    return state.pkgs.filter(function (p) { return !isFree(p) && exclude.indexOf(p) < 0 && p.id !== (C.upcoming || {}).duoPackageId; })
+    return state.pkgs.filter(function (p) { return !isFree(p) && exclude.indexOf(p) < 0 && p.id !== C.featuredPackageId; })
       .sort(byNewest).slice(0, C.rowLimit || 4);
   }
   function minPrice(pkgs) {
@@ -508,42 +536,20 @@
     }).join('') + '</div></section>';
   }
 
-  /* Bundle maths: the Duo price against buying its parts one by one. */
-  function duoInfo() {
-    var u = C.upcoming || {};
-    var duo = u.duoPackageId ? state.byId[u.duoPackageId] : null;
-    if (!duo) return null;
-    var parts = (u.duoIncludes || []).map(function (id) { return state.byId[id]; }).filter(Boolean);
-    var sum = parts.reduce(function (a, p) { return a + Number(p.total_price); }, 0);
-    var save = Math.max(0, sum - Number(duo.total_price));
-    return { pkg: duo, parts: parts, sum: sum, save: save };
+  function bundleInfo() {
+    var config = C.scriptsBundle;
+    if (!config || !state.byId[config.id]) return null;
+    var bundle = state.byId[config.id];
+    var parts = config.includes.map(function (id) { return state.byId[id]; });
+    if (parts.some(function (p) { return !p || p.currency !== bundle.currency; })) return null;
+    var sum = parts.reduce(function (total, p) { return total + Number(p.total_price); }, 0);
+    var save = sum - Number(bundle.total_price);
+    return save > 0 ? { pkg: bundle, parts: parts, save: save } : null;
   }
 
-  function upcomingHtml() {
-    var u = C.upcoming;
-    if (!u || !u.enabled) return '';
-    var k = 'up.' + u.key + '.';
-    var duo = duoInfo();
-    if (duo) {
-      var p = duo.pkg, inB = inBasket(p.id);
-      return '<section class="duo" aria-labelledby="duo-h"><div class="duo-copy"><p class="tag">' + esc(t('duo.tag')) + '</p>' +
-        '<h2 id="duo-h">' + esc(p.name) + '</h2><ul class="duo-parts">' + duo.parts.map(function (x) {
-          return '<li><span>' + esc(x.name) + '</span><b>' + esc(money(x.total_price, x.currency)) + '</b></li>';
-        }).join('') + '</ul><div class="big-price">' + esc(money(p.total_price, p.currency)) +
-        (duo.save > 0 ? ' <s>' + esc(money(duo.sum, p.currency)) + '</s> <span class="save">' + esc(t('duo.save', { p: money(duo.save, p.currency) })) + '</span>' : '') + '</div>' +
-        '<div class="slide-cta"><button type="button" class="btn' + (inB ? ' in' : '') + '" data-add="' + esc(p.ident) + '" data-big="1" data-duo="1">' + esc(inB ? t('pkg.in') : t('duo.add')) + '</button>' +
-        '<button type="button" class="btn-2" data-open="' + p.id + '">' + esc(t('card.view')) + '</button></div></div>' +
-        '<button type="button" class="duo-img" data-open="' + p.id + '" aria-label="' + esc(t('card.view') + ': ' + p.name) + '">' +
-        (p.image ? '<img src="' + esc(p.image) + '" alt="" loading="lazy">' : ICONS.packs) + '</button></section>';
-    }
-    if (u.packageId && state.byId[u.packageId]) return '';
-    var featured = state.byId[C.featuredPackageId];
-    return '<section class="soon" aria-labelledby="soon-h"><div class="soon-copy"><p class="tag">' + esc(t(k + 'tag')) + '</p>' +
-      '<h2 id="soon-h">' + esc(t(k + 'title')) + ' <span>' + esc(t(k + 'accent')) + '</span></h2>' +
-      '<p class="slide-sub">' + esc(t(k + 'sub')) + '</p><p class="soon-offer">' + esc(t(k + 'offer')) + '</p>' +
-      '<div class="slide-cta"><a class="btn" href="' + esc(C.discordUrl) + '" target="_blank" rel="noopener">' + esc(t('up.notify')) + '</a>' +
-      (featured ? '<a class="btn-2" href="#/package/' + featured.id + '">' + esc(t('up.shop')) + '</a>' : '') + '</div></div>' +
-      '<div class="soon-art" aria-hidden="true"><span class="soon-stamp">' + esc(t(k + 'tag')) + '</span><b>F</b><i>V1</i></div></section>';
+  function bundleSavingHtml(bundle) {
+    if (!bundle) return '';
+    return '<p class="bundle-saving">' + esc(t('bundle.save', { p: money(bundle.save, bundle.pkg.currency) })) + '</p>';
   }
 
   function deliveryFaqHtml() {
@@ -559,14 +565,14 @@
   }
 
   function homeHtml() {
-    var html = '<div class="wrap">' + heroHtml();
+    var hero = heroHtml(), highlights = highlightsHtml();
+    var html = '<div class="wrap"><div class="home-top' + (hero && highlights ? ' with-highlights' : '') + '">' + hero + highlights + '</div>';
     if (state.loading) {
-      html += '<div class="sec-h"><h2>' + esc(t('drop.title')) + '</h2></div><div class="grid cols-3">' + skeletonCards(3) + '</div>';
+      html += '<div class="sec-h"><h2>' + esc(t('drop.title')) + '</h2></div><div class="grid">' + skeletonCards(4) + '</div>';
     } else {
       html += statsHtml();
       var drop = newDropPkgs();
       html += rowHtml('products', t('drop.title'), t('drop.sub'), drop, '<a href="#/all">' + esc(t('drop.all')) + ' →</a>');
-      html += upcomingHtml();
       html += rowHtml('free', t('free.title'), t('free.sub'), freePkgs(), '');
       var more = morePkgs(drop);
       html += rowHtml('more', t('more.title'), minPrice(more) ? t('more.sub', { p: minPrice(more) }) : '', more, '<a href="#/all">' + esc(t('drop.all')) + ' →</a>');
@@ -596,7 +602,7 @@
   }
 
   function render() {
-    var v = state.view, html, title = C.storeName + ' | FiveM Clothing & Weapons';
+    var v = state.view, html, title = storeTitle;
     if (state.error && v.name !== 'thanks') html = errorHtml();
     else if (v.name === 'thanks') html = thanksHtml();
     else if (v.name === 'category') {
@@ -611,7 +617,7 @@
       html = state.loading ? '<div class="wrap"><div class="grid">' + skeletonCards(8) + '</div></div>' : listHtml(t('cat.back'), '', state.pkgs, false);
     } else html = homeHtml();
     $('#view').innerHTML = html;
-    document.title = title;
+    state.viewTitle = document.title = title;
     renderNav();
     startCarousel();
   }
@@ -663,10 +669,9 @@
     var vids = videos.map(function (v) { return '<a class="btn-2" href="' + esc(v.url) + '" target="_blank" rel="noopener">▶ Video</a>'; }).join(' ');
     var chips = chipsHtml(p) + detailChips(p);
     var label = inB ? t('pkg.in') : (free ? t('pkg.get') : t('pkg.add') + ' · ' + money(p.total_price, p.currency));
-    var duo = duoInfo(), upsell = '';
-    if (duo && duo.pkg.id !== p.id && duo.parts.indexOf(p) >= 0 && duo.save > 0) {
-      upsell = '<button type="button" class="upsell" data-open="' + duo.pkg.id + '"><span>' + esc(t('duo.upsell', { name: duo.pkg.name, p: money(duo.save, duo.pkg.currency) })) +
-        '</span><b>' + esc(money(duo.pkg.total_price, duo.pkg.currency)) + ' →</b></button>';
+    var bundle = bundleInfo(), upsell = '';
+    if (bundle && bundle.parts.indexOf(p) >= 0) {
+      upsell = '<button type="button" class="upsell" data-open="' + bundle.pkg.id + '"><span>' + esc(t('bundle.upsell')) + '</span><b>313 Mods 3-in-1 →</b></button>';
     }
     var trust = t('pkg.trust');
     trust = Array.isArray(trust) ? '<ul class="trust">' + trust.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '';
@@ -675,7 +680,7 @@
       '<div class="sheet-info"><div class="sheet-top"><div><p class="tag">' + esc(p._cat ? p._cat.name : '') + '</p><h2 id="pkg-name">' + esc(p.name) + '</h2></div>' +
       '<button type="button" class="x" data-close-pkg aria-label="' + esc(t('pkg.close')) + '">✕</button></div>' +
       (chips ? '<div class="chips-inline">' + chips + '</div>' : '') +
-      '<div class="big-price">' + priceHtml(p) + '</div>' + upsell +
+      '<div class="big-price">' + priceHtml(p) + '</div>' + (bundle && bundle.pkg.id === p.id ? bundleSavingHtml(bundle) : '') + upsell +
       '<div class="desc" id="pkg-desc"></div>' + trust +
       '<div class="sheet-cta"><button type="button" class="btn btn-full' + (inB ? ' in' : '') + '" data-add="' + esc(p.ident) + '" data-big="1">' + esc(label) + '</button>' +
       '<p class="small-note">' + esc(isAuthed() ? t('pkg.delivery') : t('pkg.loginnote')) + '</p></div></div></div>';
@@ -770,7 +775,6 @@
       if (!p) return;
       var inB = inBasket(p.id), big = btn.hasAttribute('data-big');
       btn.classList.toggle('in', inB);
-      if (btn.hasAttribute('data-duo')) { btn.textContent = inB ? t('pkg.in') : t('duo.add'); return; }
       btn.textContent = inB ? t(big ? 'pkg.in' : 'card.in')
         : (isFree(p) ? t(big ? 'pkg.get' : 'card.get') : (big ? t('pkg.add') + ' · ' + money(p.total_price, p.currency) : t('card.add')));
     });
@@ -789,7 +793,60 @@
 
   /* ---------- Offers: welcome call and basket gift ---------- */
   var ICON_CALL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>';
-  var offerOpen = null, offerFocus = null;
+  var offerOpen = null, offerFocus = null, callOffer = null, lastCallKey = null;
+  var campaignStatus, campaignTimer;
+
+  function activeCampaign() {
+    var c = C.campaign, now = Date.now();
+    return c && now >= Date.parse(c.startsAt) && now < Date.parse(c.endsAt) ? c : null;
+  }
+  function currentCall() {
+    return activeCampaign() || (C.welcomeOffer && C.welcomeOffer.enabled ? C.welcomeOffer : null);
+  }
+  function callKey(offer) {
+    return offer === C.campaign ? KEYS.call + '.' + offer.code : KEYS.call;
+  }
+  function campaignEnd(campaign) {
+    var locale = { en: 'en-US', es: 'es-CL', pt: 'pt-BR' }[state.lang];
+    var end = new Intl.DateTimeFormat(locale, {
+      timeZone: campaign.timeZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+    }).format(new Date(campaign.endsAt));
+    return '<time datetime="' + esc(campaign.endsAt) + '">' + esc(end + ' NST') + '</time>';
+  }
+  function renderCampaign() {
+    var c = activeCampaign(), el = $('#campaign');
+    el.hidden = !c;
+    $('#foot-offer').hidden = !currentCall();
+    el.innerHTML = c ? '<div class="wrap campaign-row"><div class="campaign-info">' +
+      '<strong>' + esc(t('cyber.title', { p: c.percent })) + '</strong><span>' + esc(t('cyber.until')) + ' ' + campaignEnd(c) + '</span></div>' +
+      '<div class="campaign-actions"><button type="button" class="campaign-code" data-offer="copy" aria-label="' + esc(t('call.copy') + ' ' + c.code) + '">' +
+      '<code>' + esc(c.code) + '</code><span>' + esc(t('cyber.copy')) + '</span></button>' +
+      '<button type="button" class="campaign-call" data-offer="open" aria-haspopup="dialog" aria-controls="offer">' + ICON_CALL + esc(t('call.reopen')) + '</button></div></div>' : '';
+  }
+  function syncCampaign() {
+    var c = C.campaign;
+    if (!c) return;
+    var active = activeCampaign(), now = Date.now(), ends = Date.parse(c.endsAt);
+    if (campaignStatus !== active) {
+      campaignStatus = active;
+      if ((callOffer && callOffer !== currentCall()) || (active && offerOpen === 'gift')) closeOffer();
+      if (now >= ends && lsGet(KEYS.coupon) === c.code) lsSet(KEYS.coupon, null);
+      renderCampaign();
+      if (state.viewRendered) {
+        render();
+        var routePkg = parseHash();
+        if (!$('#basket').hidden) {
+          var couponField = $('#basket-coupon-in');
+          if (!active && couponField && couponField.value === c.code) couponField.value = '';
+        } else if (routePkg.name === 'package' && !$('#pkg').hidden) {
+          openPackage(routePkg.id);
+        }
+      }
+    }
+    clearTimeout(campaignTimer);
+    var next = now < Date.parse(c.startsAt) ? Date.parse(c.startsAt) : ends;
+    if (next > now) campaignTimer = setTimeout(syncCampaign, Math.min(next - now, 2147483647));
+  }
 
   function openOffer(kind, html) {
     var o = $('#offer');
@@ -805,23 +862,33 @@
   function closeOffer() {
     if (!offerOpen) return;
     offerOpen = null;
+    callOffer = null;
     $('#offer').hidden = true;
     $('#offer-overlay').hidden = true;
     if ($('#basket').hidden && $('#pkg').hidden) lock(false);
     if (offerFocus && offerFocus.focus) offerFocus.focus();
   }
   function canOffer() {
-    return !offerOpen && $('#pkg').hidden && $('#basket').hidden && state.view.name !== 'thanks' && !document.hidden && !state.loading;
+    return !offerOpen && $('#pkg').hidden && $('#basket').hidden && !document.hidden;
   }
 
-  function callHtml() {
-    var o = C.welcomeOffer, p = o.percent;
-    var perks = [1, 2, 3].map(function (n) {
+  function openCall() {
+    var o = currentCall();
+    if (!o || !canOffer()) return;
+    callOffer = o;
+    lastCallKey = callKey(o);
+    lsSet(lastCallKey, 'shown');
+    openOffer('call', callHtml(o));
+  }
+  function callHtml(o) {
+    var p = o.percent, cyber = o === C.campaign;
+    var perks = cyber ? '' : '<ul class="perks">' + [1, 2, 3].map(function (n) {
       return '<li><b>' + esc(t('call.b' + n + '.t', { p: p })) + '</b><span>' + esc(t('call.b' + n + '.d')) + '</span></li>';
-    }).join('');
+    }).join('') + '</ul>';
     return '<button type="button" class="x offer-x" data-offer="decline" aria-label="' + esc(t('call.close')) + '">✕</button>' +
-      '<div class="offer-copy"><p class="tag">313 Mods</p><h2 id="offer-h">' + esc(t('call.title', { p: p })) + '</h2>' +
-      '<p class="offer-sub">' + esc(t('call.sub')) + '</p><ul class="perks">' + perks + '</ul>' +
+      '<div class="offer-copy"><h2 id="offer-h">' + esc(t(cyber ? 'cyber.title' : 'call.title', { p: p })) + '</h2>' +
+      '<p class="offer-sub">' + esc(t('call.sub')) + '</p>' +
+      (cyber ? '<p class="offer-deadline">' + esc(t('cyber.until')) + ' ' + campaignEnd(o) + '</p>' : '') + perks +
       '<div class="offer-code" id="offer-code" hidden><p class="tag">' + esc(t('call.got')) + '</p>' +
       '<div class="code-row"><code id="offer-code-v">' + esc(o.code) + '</code><button type="button" class="btn-2" data-offer="copy">' + esc(t('call.copy')) + '</button></div>' +
       '<p class="small-note">' + esc(t('call.gotsub')) + '</p><button type="button" class="btn" data-offer="shop">' + esc(t('call.shop')) + '</button></div></div>' +
@@ -834,9 +901,9 @@
       '<div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>';
   }
   function acceptCall() {
-    var o = C.welcomeOffer, card = $('.offer-card');
-    lsSet(KEYS.call, 'accepted');
-    lsSet(KEYS.coupon, o.code);
+    var o = callOffer, card = $('.offer-card');
+    if (!o || o !== currentCall()) { closeOffer(); syncCampaign(); return; }
+    lsSet(callKey(o), 'accepted');
     if (card) card.classList.add('connected');
     var st = $('#call-status'); if (st) st.textContent = t('call.connected');
     var b = $('#call-btns'); if (b) b.hidden = true;
@@ -846,21 +913,28 @@
     applyCoupon(o.code, true);
   }
   function copyOfferCode(btn) {
-    var el = $('#offer-code-v'); if (!el) return;
-    var done = function () { btn.textContent = t('call.copied'); };
-    var fallback = function () { var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); };
+    var el = btn.querySelector('code') || $('#offer-code-v');
+    if (!el) return;
+    var done = function () { toast(t('call.copied')); };
+    var fallback = function () {
+      var r = document.createRange(), s = window.getSelection();
+      r.selectNodeContents(el);
+      s.removeAllRanges(); s.addRange(r);
+      if (document.execCommand('copy')) { s.removeAllRanges(); done(); }
+    };
     try { navigator.clipboard.writeText(el.textContent).then(done, fallback); } catch (e) { fallback(); }
   }
   function maybeWelcome() {
-    var o = C.welcomeOffer;
-    if (!o || !o.enabled || lsGet(KEYS.call)) return;
+    var o = currentCall();
+    if (!o) return;
+    var key = callKey(o);
+    if (lsGet(key) || lastCallKey === key) return;
     var tries = 0;
     (function wait(delay) {
       setTimeout(function () {
-        if (lsGet(KEYS.call) || basketCount() > 0) return;
-        if (!canOffer()) { if (++tries < 6) wait(10000); return; }
-        lsSet(KEYS.call, 'shown');
-        openOffer('call', callHtml());
+        if (o !== currentCall() || lsGet(key) || lastCallKey === key || basketCount() > 0) return;
+        if (!canOffer() || parseHash().name !== 'home' || state.error) { if (++tries < 6) wait(10000); return; }
+        openCall();
       }, delay);
     })((o.delaySeconds || 8) * 1000);
   }
@@ -879,7 +953,7 @@
   }
   function giftEligible() {
     var g = C.basketGift, b = state.basket;
-    return !!(g && g.enabled && b && isAuthed() && basketCount() > 0 && !(b.coupons && b.coupons.length) && lsGet(KEYS.gift) !== b.ident);
+    return !!(!activeCampaign() && g && g.enabled && b && isAuthed() && basketCount() > 0 && !(b.coupons && b.coupons.length) && lsGet(KEYS.gift) !== b.ident);
   }
   function showGift() {
     lsSet(KEYS.gift, state.basket.ident);
@@ -910,7 +984,7 @@
     if ((m = h.match(/^\/category\/(\d+)/))) return { name: 'category', id: Number(m[1]) };
     if (h === '/all') return { name: 'all' };
     if (h === '/thanks') return { name: 'thanks' };
-    if (h === '/faq' || h === '/delivery') return { name: 'home', anchor: h.slice(1) };
+    if (h === '/faq' || h === '/delivery' || h === '/products') return { name: 'home', anchor: h.slice(1) };
     return { name: 'home' };
   }
   function route() {
@@ -929,6 +1003,7 @@
     if (changed && r.name === 'home') state.slide = 0;
     state.view = r;
     if (changed) { render(); state.viewRendered = true; window.scrollTo(0, 0); }
+    else document.title = state.viewTitle;
     if (anchor) scrollToId(anchor);
   }
   function scrollToId(id) {
@@ -941,17 +1016,23 @@
     var el;
     if ((el = e.target.closest('[data-offer]'))) {
       var a = el.getAttribute('data-offer');
-      if (a === 'accept') acceptCall();
-      else if (a === 'decline') { lsSet(KEYS.call, 'declined'); closeOffer(); }
+      if (a === 'open') openCall();
+      else if (a === 'accept') acceptCall();
+      else if (a === 'decline') closeOffer();
       else if (a === 'copy') copyOfferCode(el);
-      else if (a === 'shop') { closeOffer(); scrollToId('products'); }
+      else if (a === 'shop') {
+        closeOffer();
+        if (state.view.name === 'home') scrollToId('products');
+        else location.hash = '#/products';
+      }
       else if (a === 'gift-apply') applyGift();
       else if (a === 'gift-later') closeOffer();
       return;
     }
     if ((el = e.target.closest('[data-open]'))) {
-      state.cameFromList = true;
-      location.hash = '#/package/' + el.getAttribute('data-open');
+      var href = '#/package/' + el.getAttribute('data-open');
+      if (el.closest('#pkg')) location.replace(href);
+      else { state.cameFromList = true; location.hash = href; }
       return;
     }
     if ((el = e.target.closest('[data-add]'))) { addPackage(el.getAttribute('data-add'), el); return; }
@@ -974,7 +1055,7 @@
     }
     if ((el = e.target.closest('[data-scroll]'))) { scrollToId(el.getAttribute('data-scroll')); return; }
     if ((el = e.target.closest('[data-retry]'))) { loadStore(); return; }
-    if (e.target.id === 'offer-overlay') { if (offerOpen === 'call') lsSet(KEYS.call, 'declined'); closeOffer(); return; }
+    if (e.target.id === 'offer-overlay') { closeOffer(); return; }
     if (e.target.id === 'pkg-overlay') { if (!$('#basket').hidden) closeBasket(); else closePackage(false); }
   });
 
@@ -997,8 +1078,17 @@
   });
 
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab' && offerOpen) {
+      var buttons = $$('#offer button:not([disabled])').filter(function (b) { return b.getClientRects().length; });
+      var first = buttons[0], last = buttons[buttons.length - 1];
+      if ((e.shiftKey && document.activeElement === first) || (!e.shiftKey && document.activeElement === last)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+      return;
+    }
     if (e.key !== 'Escape') return;
-    if (offerOpen) { if (offerOpen === 'call' && !$('.offer-card.connected')) lsSet(KEYS.call, 'declined'); closeOffer(); }
+    if (offerOpen) closeOffer();
     else if (!$('#basket').hidden) closeBasket();
     else if (!$('#pkg').hidden) closePackage(false);
   });
@@ -1015,7 +1105,7 @@
   ['#lang-select', '#lang-select-m'].forEach(function (sel) {
     $(sel).addEventListener('change', function () {
       state.lang = this.value; lsSet(KEYS.lang, state.lang);
-      applyStaticText(); renderTicker(); render();
+      applyStaticText(); renderTicker(); renderCampaign(); render();
       if (!$('#basket').hidden) renderBasket();
       var r = parseHash(); if (r.name === 'package') openPackage(r.id);
     });
@@ -1040,7 +1130,7 @@
     var p = new URLSearchParams(location.search).get('preview');
     if (p !== 'call' && p !== 'gift') return false;
     history.replaceState(null, '', siteUrl() + location.hash);
-    if (p === 'call') openOffer('call', callHtml());
+    if (p === 'call') openCall();
     else {
       var names = state.basket && basketCount() ? state.basket.packages.map(function (x) { return x.name; })
         : [(state.byId[C.featuredPackageId] || state.pkgs[0] || { name: '313 MALE V1' }).name];
@@ -1052,7 +1142,10 @@
   var prevSeen = lsGet(KEYS.seen);
   var markSeen = function () { lsSet(KEYS.seen, String(Date.now())); };
   markSeen();
-  document.addEventListener('visibilitychange', function () { if (document.hidden) markSeen(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) markSeen();
+    else syncCampaign();
+  });
   window.addEventListener('pagehide', markSeen);
 
   state.lang = detectLang();
@@ -1060,6 +1153,7 @@
   $('#year').textContent = String(new Date().getFullYear());
   applyStaticText();
   renderTicker();
+  syncCampaign();
   route();
   var storeReady = loadStore().then(function () {
     if (state.openWhenReady) { var id = state.openWhenReady; state.openWhenReady = null; openPackage(id); }

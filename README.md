@@ -19,10 +19,11 @@ Web propia de 313 Mods conectada a Tebex con la Headless API. Los productos, pre
 
 | Ajuste | Qué hace |
 |---|---|
-| `newDrop` | IDs de Tebex de los productos de «New drop», en orden. Ahora: Male V1 + Violet Hour Crewneck + Undertow Jeans. |
-| `welcomeOffer` | Llamada de bienvenida con descuento para quien entra por primera vez. El código (`WELCOME10`) tiene que existir en Tebex → Engagement → Coupons. `enabled: false` la apaga. |
-| `basketGift` | Mensaje de regalo para quien deja productos en la cesta y vuelve después de `afterMinutes`, o mueve el ratón para cerrar la pestaña. El código (`GIFT10`) tiene que existir en Tebex. |
-| `upcoming` | Aviso «Coming soon» de Female V1. Cuando exista en Tebex, pon su ID en `packageId`. Cuando crees el pack Duo, pon su ID en `duoPackageId` y los IDs que incluye en `duoIncludes`: la web calcula sola el precio tachado y lo que se ahorra. |
+| `highlights`, `newDrop` | Paquetes destacados junto a MALE V1 y orden de las novedades debajo, respectivamente. |
+| `scriptsBundle` | ID del bundle 3 en 1 e IDs de sus tres productos. El ahorro frente a la compra por separado se calcula con los precios del catálogo. |
+| `campaign` | Franja, precios promocionales y llamada de Cyber durante la vigencia de `CYBER313`. Las fechas deben coincidir con las del cupón en Tebex. |
+| `welcomeOffer` | Llamada de primera visita fuera de Cyber. También se puede abrir desde el pie de la tienda. El cupón `WELCOME10` debe existir en Tebex. |
+| `basketGift` | Mensaje de regalo fuera de Cyber para quien abandona su cesta. El cupón `GIFT10` debe existir en Tebex. |
 
 Para ver las ventanas sin esperar: `https://313mods.shop/?preview=call` y `https://313mods.shop/?preview=gift`.
 

@@ -12,10 +12,15 @@ window.SITE_CONFIG = {
   // The pack the homepage banner promotes.
   featuredPackageId: 7810095,
 
-  // "New drop" on the homepage: these Tebex package IDs, in this order.
-  // Male V1, Violet Hour Crewneck and Undertow Jeans make one full fit.
-  // If an ID disappears from Tebex, the newest paid item takes its place.
-  newDrop: [7810095, 7810461, 7810460],
+  // The two releases alongside the main homepage banner.
+  highlights: [
+    { id: 7829601, key: 'emotes', name: '313 DP-Emotes V1' },
+    { id: 7829624, key: 'bundle', name: '313 Mods 3‑in‑1' }
+  ],
+
+  // Published Tebex packages, shown in this order in New Releases.
+  newDrop: [7829601, 7829613, 7829611, 7829624],
+  scriptsBundle: { id: 7829624, includes: [7829601, 7829613, 7829611] },
 
   // How many items the "Free drops" and "More pieces" rows show.
   rowLimit: 4,
@@ -24,21 +29,18 @@ window.SITE_CONFIG = {
   // The code must exist in Tebex: Engagement > Coupons.
   welcomeOffer: { enabled: true, code: 'WELCOME10', percent: 10, delaySeconds: 3 },
 
+  // Use the same start and expiry as the coupon in Tebex (Newfoundland standard time).
+  campaign: {
+    code: 'CYBER313', percent: 30, delaySeconds: 6,
+    startsAt: '2026-11-22T13:54:00-03:30',
+    endsAt: '2026-12-01T13:54:00-03:30',
+    timeZone: 'America/St_Johns'
+  },
+
   // Text message gift for people who leave items in their basket.
   // Shown when they come back after "afterMinutes", or when they move to close the tab.
   // The code must exist in Tebex: Engagement > Coupons.
   basketGift: { enabled: true, code: 'GIFT10', percent: 10, afterMinutes: 30 },
-
-  // Upcoming release and its launch bundle.
-  // Leave packageId as null until Female V1 is in Tebex; the homepage shows a "Coming soon" teaser.
-  // When you create the bundle package in Tebex, put its ID in duoPackageId and the IDs it contains in duoIncludes.
-  upcoming: {
-    enabled: true,
-    key: 'female-v1',
-    packageId: null,
-    duoPackageId: null,
-    duoIncludes: [7810095]
-  },
 
   // Carousel slides. "target" picks the category the main button opens:
   // "featured" opens the featured package, "all" scrolls to New Drop,
@@ -49,6 +51,7 @@ window.SITE_CONFIG = {
 
   // Words used to recognise each kind of category by its name in Tebex.
   categoryRoles: {
+    scripts: /script/i,
     clothing: /cloth|wear|set|shirt|hoodie|jacket|outfit|eup|ropa|pants|jean/i,
     weapons: /weapon|gun|arma|rifle|pistol|smg|shotgun/i,
     packs: /pack|bundle|combo/i
